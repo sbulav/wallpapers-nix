@@ -3,6 +3,12 @@
 Just a bunch of wallpapers packed as Nix package.
 Based on the [NotAShelf/wallpkgs](https://github.com/NotAShelf/wallpkgs)
 
+The flake exports:
+
+- `packages.${system}.default`, `packages.${system}.full`, and `packages.${system}.wallpkgs`
+- one package per wallpaper directory under `wallpapers/`, currently `catppuccin`, `cities`, `nature`, and `unorganized`
+- `overlays.default`
+
 ## Building
 
 ```console
@@ -21,8 +27,32 @@ $ nix build .#catppuccin
 
 ```nix
 inputs = {
-    wallpapers-nix = "github:sbulav/wallpapers-nix";
+  wallpapers-nix.url = "github:sbulav/wallpapers-nix";
 };
+```
+
+## Overlay usage
+
+```nix
+{
+  inputs.wallpapers-nix.url = "github:sbulav/wallpapers-nix";
+
+  outputs = { nixpkgs, wallpapers-nix, ... }: {
+    nixosConfigurations.host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ({ pkgs, ... }: {
+          nixpkgs.overlays = [ wallpapers-nix.overlays.default ];
+
+          environment.systemPackages = [
+            pkgs.wallpkgs
+            pkgs.catppuccin
+          ];
+        })
+      ];
+    };
+  };
+}
 ```
 
 ## Using the wallpapers
@@ -30,19 +60,18 @@ inputs = {
 > The `wallpapers-nix` package moves included wallpapers to `$out/share/wallpapers` by
 > default. You may reference those files at `$NIX_USER_PROFILE_DIR/share/wallpapers/${style}`
 > if they are installed via `nix profile install` (multi-user Nix), or reference the
-> package path if installed via flake inputs with `${pkgs.wallpapers-nix}` inside NixOS
+> package path if installed via flake inputs with
+> `inputs.wallpapers-nix.packages.${pkgs.system}.default` inside NixOS
 > configurations.
 
-You can also reference the package path with ${pkgs.wallpapers-nix}, optionally providing a style:
+You can also use a style-specific package directly from the flake outputs:
 
 ```nix
-{inputs, ...}:
+{ inputs, pkgs, ... }:
 let
-    wallpapers-nix = inputs.wallpapers-nix.packages.${pkgs.system}.catppuccin;
+  wallpapers = inputs.wallpapers-nix.packages.${pkgs.system}.catppuccin;
 in {
-    home.packages = [
-        wallpapers-nix
-    ];
+  home.packages = [ wallpapers ];
 }
 ```
 

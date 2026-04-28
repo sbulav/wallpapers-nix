@@ -5,6 +5,8 @@
     Based on the https://github.com/NotAShelf/wallpkgs
   '';
 
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
   outputs = {
     self,
     nixpkgs,
@@ -22,52 +24,54 @@
     version = props.version + "_" + (self.shortRev or "dirty");
 
     props = builtins.fromJSON (builtins.readFile ./nix/props.json);
+    wallpaperDirs = builtins.readDir ./wallpapers;
+    styles = builtins.attrNames (
+      lib.filterAttrs (_: kind: kind == "directory") wallpaperDirs
+    );
+    mkWallpaperPackage = prev: style:
+      prev.callPackage ./nix/default.nix {
+        inherit version style;
+        stdenv = prev.stdenvNoCC;
+      };
   in {
     overlays.default = _: prev: let
-      stdenv = prev.stdenvNoCC;
-    in rec {
-      full = wallpkgs;
-      wallpkgs = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = null;
+      stylePackages = lib.genAttrs styles (mkWallpaperPackage prev);
+    in
+      stylePackages
+      // rec {
+        full = wallpkgs;
+        wallpkgs = prev.callPackage ./nix/default.nix {
+          inherit version;
+          stdenv = prev.stdenvNoCC;
+          style = null;
+        };
       };
-
-      catppuccin = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = "catppuccin";
-      };
-
-      cities = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = "cities";
-      };
-
-      monochrome = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = "monochrome";
-      };
-
-      nature = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = "nature";
-      };
-
-      space = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = "space";
-      };
-
-      unorganized = prev.callPackage ./nix/default.nix {
-        inherit version stdenv;
-        style = "unorganized";
-      };
-    };
 
     packages = genSystems (system:
       (self.overlays.default null pkgsFor.${system})
       // {
         default = self.packages.${system}.wallpkgs;
       });
+
+    checks = genSystems (system: let
+      pkgs = pkgsFor.${system};
+      packageSet = self.packages.${system};
+    in
+      {
+        format =
+          pkgs.runCommand "wallpapers-nix-format-check" {
+            nativeBuildInputs = [pkgs.alejandra];
+          } ''
+            cd ${self}
+            alejandra --check flake.nix nix/*.nix
+            touch $out
+          '';
+      }
+      // lib.mapAttrs' (
+        name: package:
+          lib.nameValuePair "build-${name}" package
+      )
+      packageSet);
 
     formatter = genSystems (system: pkgsFor.${system}.alejandra);
   };
